@@ -16,20 +16,13 @@ var fs = require('fs');
 var url = require('url');
 var messagesData = [];
 var messagesURL = '/classes/';
-// var logURL = '/classes/messages';
-var nextObjectId = 0;
-var room1URL = '/classes/room1';
-//has only one key: results
-//             val: an array of objects of the following form:
-// {
-//     "createdAt":"2015-12-14T22:24:12.224Z", //what time we received the POST request for that message
-//     "objectId":"kOUTA3rBsc",
-//     "opponents":{"__type":"Relation","className":"Player"},
-//     "roomname":"4chan",
-//     "text":"trololo",
-//     "updatedAt":"2015-12-14T22:24:12.224Z",
-//     "username":"shawndrost"
-// }
+var staticURLs = { '/index.html': true,
+                   '/styles/styles.css': true,
+                   '/bower_components/jquery/dist/jquery.js': true,
+                   '/bower_components/underscore/underscore.js': true,
+                   '/env/config.js': true,
+                   '/scripts/app.js': true };
+var pathToStaticURLs = '../client';
 var contentTypes = {
   'js': 'application/javascript',
   'css': 'text/css',
@@ -84,91 +77,91 @@ var requestHandler = function(request, response) {
   //   return
   // }
 
-  // ---------------- serve static files ----------------
-  //if url is one of the below,
-          //index.html (or empty url)
-          //styles/styles.css
-          //"bower_components/jquery/dist/jquery.js"
-          //"bower_components/underscore/underscore.js"
-          //"env/config.js"
-          // "scripts/app.js"
   var parsedURL = url.parse(request.url,true);
   var pathName = parsedURL.pathname;
+  if (pathName === '/') {
+    pathName = '/index.html';
+  }
   var queryString = parsedURL.query;
 
-  if(pathName === '/' ||
-    pathName === '/index.html'|| // and also for this one
-    pathName === '/styles/styles.css'||
-    pathName === '/bower_components/jquery/dist/jquery.js'||
-    pathName === '/bower_components/underscore/underscore.js'||
-    pathName === '/env/config.js'||
-    pathName === '/scripts/app.js'){
-    
-    var extension = pathName.substring(pathName.lastIndexOf('.') + 1);
+  // ---------------- serve static files ----------------
 
-    pathName = pathName === '/' ? '/index.html' : pathName;
-    //read the file on hard drive via fs module
-    var fileName = '../client' + pathName;
+  if(pathName in staticURLs) {
+    var fileName = pathToStaticURLs + pathName;
+    //read the file on hard drive via fs module; callback: return html as response
     fs.readFile(fileName,function(err, data){
-      if (err) throw err;
+      if (err) {
+        throw err;
+      }
+      var extension = pathName.substring(pathName.lastIndexOf('.') + 1);
       headers['Content-Type'] = contentTypes[extension];
       response.writeHead(200, headers);
       response.end(data);
     });
-    //return entire file's html as response body
-    //status code: 200
   }
 
-  //else [do all the endpoint url checking, below]
 
-  // ---------------- serve messages as endpoint ----------------
-  //if request.url is [our url]
+  // ---------------- serve endpoints ----------------
+
+  // handle OPTIONS request
+  else if (request.method.toUpperCase()==='OPTIONS'){
+    response.writeHead(200, headers);
+    response.end();
+  }
+
+  // handle message GET and POST request
   else if(request.url.substring(0, messagesURL.length) === messagesURL){
     var roomName = request.url.substring(messagesURL.length);
-    //if request method is GET
+ 
+    // handle GET request
     if(request.method.toUpperCase() === "GET"){
       //response.end(the messages as json)
-      headers['Content-Type'] = "application/json";
-      response.writeHead(200, headers);
       var filteredData = _.filter(messagesData, function(message){
         return (message.roomname === roomName);
       });
+      headers['Content-Type'] = "application/json";
+      response.writeHead(200, headers);
       response.end(JSON.stringify({results:filteredData})); // should filler by room name
     }
-    //else if request method is POST
+
+    // handle POST request
     else if(request.method.toUpperCase() === "POST"){
       request.on('data', function(data){
         //process request to save it to our messages:
         var message = JSON.parse(data);
-        //add createdAt, updatedAt, objectId, and opponents to the data
+        //want to transform data from request into an object of this form:
+        // {
+          // "createdAt":"2015-12-14T22:24:12.224Z", //what time we received the POST request for that message
+          // "objectId":"kOUTA3rBsc",
+          // "opponents":{"__type":"Relation","className":"Player"},
+          // "roomname":"4chan",
+          // "text":"trololo",
+          // "updatedAt":"2015-12-14T22:24:12.224Z",
+          // "username":"shawndrost"
+        // }
         var dateString = JSON.stringify(new Date());
-        message.createdAt = dateString;
-        message.updatedAt = dateString;
-        message.objectId = nextObjectId++;
-        message.opponents = {"__type":"Relation","className":"Player"};
-        message.roomname = roomName;
-        //push to data.results
+        _.extend(message, { createdAt: dateString,
+                            updatedAt: dateString,
+                            objectId: messagesData.length,
+                            opponents: { "__type":"Relation", "className":"Player" },
+                            roomname: roomName });
+        //add to beginning of messagesData
         messagesData.unshift(message);
-        //response.end('')
+        
         response.writeHead(201,headers);
-        //respond with createdAt and objectId
-        response.end(JSON.stringify({createdAt: dateString, objectId: message.objectId}));
+        response.end(JSON.stringify({ createdAt: dateString, objectId: message.objectId }));
       });
     }
-    //else if options is OPTIONS
-    else if (request.method.toUpperCase()==='OPTIONS'){
-      //response.end('')
-      response.writeHead(200, headers);
-      response.end();
-    }
+    
   }
-  //(else do nothing)
-  else{
+
+  // handle any other request
+  else {
     response.writeHead(404, headers);
     response.end();
   }
-  //response.end("Hello, World!");
 };
+
 
 // These headers will allow Cross-Origin Resource Sharing (CORS).
 // This code allows this server to talk to websites that
