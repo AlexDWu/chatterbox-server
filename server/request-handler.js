@@ -11,10 +11,12 @@ this file and include it in basic-server.js so that it actually works.
 *Hint* Check out the node module documentation at http://nodejs.org/api/modules.html.
 
 **************************************************************/
-var messagesData = {results: []};
-var messagesURL = '/classes/messages';
+var _ = require('../node_modules/underscore/underscore.js');
+var messagesData = [];
+var messagesURL = '/classes/';
 // var logURL = '/classes/messages';
 var nextObjectId = 0;
+var room1URL = '/classes/room1';
 //has only one key: results
 //             val: an array of objects of the following form:
 // {
@@ -74,13 +76,17 @@ var requestHandler = function(request, response) {
   //   return
   // }
   //if request.url is [our url]
-  if(request.url === messagesURL){
+  if(request.url.substring(0, messagesURL.length) === messagesURL){
+    var roomName = request.url.substring(messagesURL.length);
     //if request method is GET
     if(request.method.toUpperCase() === "GET"){
       //response.end(the messages as json)
       headers['Content-Type'] = "application/json";
       response.writeHead(statusCode, headers);
-      response.end(JSON.stringify(messagesData));
+      var filteredData = _.filter(messagesData, function(message){
+        return (message.roomname === roomName);
+      });
+      response.end(JSON.stringify({results:filteredData})); // should filler by room name
     }
     //else if request method is POST
     else if(request.method.toUpperCase() === "POST"){
@@ -93,8 +99,9 @@ var requestHandler = function(request, response) {
         message.updatedAt = dateString;
         message.objectId = nextObjectId++;
         message.opponents = {"__type":"Relation","className":"Player"};
+        message.roomname = roomName;
         //push to data.results
-        messagesData.results.push(message);
+        messagesData.push(message);
         //response.end('')
         response.writeHead(201,headers);
         //respond with createdAt and objectId
@@ -132,4 +139,4 @@ var defaultCorsHeaders = {
   "access-control-max-age": 10 // Seconds.
 };
 
-module.exports = requestHandler;
+module.exports.requestHandler = requestHandler;
