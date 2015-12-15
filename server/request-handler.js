@@ -11,6 +11,22 @@ this file and include it in basic-server.js so that it actually works.
 *Hint* Check out the node module documentation at http://nodejs.org/api/modules.html.
 
 **************************************************************/
+var messagesData = {results: []};
+var messagesURL = '/classes/messages';
+// var logURL = '/classes/messages';
+var nextObjectId = 0;
+//has only one key: results
+//             val: an array of objects of the following form:
+// {
+//     "createdAt":"2015-12-14T22:24:12.224Z", //what time we received the POST request for that message
+//     "objectId":"kOUTA3rBsc",
+//     "opponents":{"__type":"Relation","className":"Player"},
+//     "roomname":"4chan",
+//     "text":"trololo",
+//     "updatedAt":"2015-12-14T22:24:12.224Z",
+//     "username":"shawndrost"
+// }
+
 
 var requestHandler = function(request, response) {
   // Request and Response come from node's http module.
@@ -39,11 +55,11 @@ var requestHandler = function(request, response) {
   //
   // You will need to change this if you are sending something
   // other than plain text, like JSON or HTML.
-  headers['Content-Type'] = "text/plain";
+  //headers['Content-Type'] = "application/json";
 
   // .writeHead() writes to the request line and headers of the response,
   // which includes the status and all headers.
-  response.writeHead(statusCode, headers);
+  //response.writeHead(statusCode, headers);
 
   // Make sure to always call response.end() - Node may not send
   // anything back to the client until you do. The string you pass to
@@ -52,7 +68,52 @@ var requestHandler = function(request, response) {
   //
   // Calling .end "flushes" the response's internal buffer, forcing
   // node to actually send all the data over to the client.
-  response.end("Hello, World!");
+  // if(request.url === logURL){
+  //   response.writeHead(statusCode,headers);
+  //   response.end('');
+  //   return
+  // }
+  //if request.url is [our url]
+  if(request.url === messagesURL){
+    //if request method is GET
+    if(request.method.toUpperCase() === "GET"){
+      //response.end(the messages as json)
+      headers['Content-Type'] = "application/json";
+      response.writeHead(statusCode, headers);
+      response.end(JSON.stringify(messagesData));
+    }
+    //else if request method is POST
+    else if(request.method.toUpperCase() === "POST"){
+      request.on('data', function(data){
+        //process request to save it to our messages:
+        var message = JSON.parse(data);
+        //add createdAt, updatedAt, objectId, and opponents to the data
+        var dateString = JSON.stringify(new Date());
+        message.createdAt = dateString;
+        message.updatedAt = dateString;
+        message.objectId = nextObjectId++;
+        message.opponents = {"__type":"Relation","className":"Player"};
+        //push to data.results
+        messagesData.results.push(message);
+        //response.end('')
+        response.writeHead(201,headers);
+        //respond with createdAt and objectId
+        response.end(JSON.stringify({createdAt: dateString, objectId: message.objectId}));
+      });
+    }
+    //else if options is OPTIONS
+    else if (request.method.toUpperCase()==='OPTIONS'){
+      //response.end('')
+      response.writeHead(statusCode, headers);
+      response.end('');
+    }
+  }
+  //(else do nothing)
+  else{
+    response.writeHead(404, headers);
+    response.end();
+  }
+  //response.end("Hello, World!");
 };
 
 // These headers will allow Cross-Origin Resource Sharing (CORS).
@@ -67,7 +128,8 @@ var requestHandler = function(request, response) {
 var defaultCorsHeaders = {
   "access-control-allow-origin": "*",
   "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "access-control-allow-headers": "content-type, accept",
+  "access-control-allow-headers": "content-type, accept, x-parse-application-id, x-parse-rest-api-key",
   "access-control-max-age": 10 // Seconds.
 };
 
+module.exports = requestHandler;
