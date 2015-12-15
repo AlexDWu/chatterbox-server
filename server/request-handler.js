@@ -12,6 +12,8 @@ this file and include it in basic-server.js so that it actually works.
 
 **************************************************************/
 var _ = require('../node_modules/underscore/underscore.js');
+var fs = require('fs');
+var url = require('url');
 var messagesData = [];
 var messagesURL = '/classes/';
 // var logURL = '/classes/messages';
@@ -28,6 +30,12 @@ var room1URL = '/classes/room1';
 //     "updatedAt":"2015-12-14T22:24:12.224Z",
 //     "username":"shawndrost"
 // }
+var contentTypes = {
+  'js': 'application/javascript',
+  'css': 'text/css',
+  'html': 'text/html',
+  'json': 'application/json',
+}
 
 
 var requestHandler = function(request, response) {
@@ -48,7 +56,7 @@ var requestHandler = function(request, response) {
   console.log("Serving request type " + request.method + " for url " + request.url);
 
   // The outgoing status.
-  var statusCode = 200;
+  // var statusCode = 200;
 
   // See the note below about CORS headers.
   var headers = defaultCorsHeaders;
@@ -75,14 +83,53 @@ var requestHandler = function(request, response) {
   //   response.end('');
   //   return
   // }
+
+  // ---------------- serve static files ----------------
+  //if url is one of the below,
+          //index.html (or empty url)
+          //styles/styles.css
+          //"bower_components/jquery/dist/jquery.js"
+          //"bower_components/underscore/underscore.js"
+          //"env/config.js"
+          // "scripts/app.js"
+  var parsedURL = url.parse(request.url,true);
+  var pathName = parsedURL.pathname;
+  var queryString = parsedURL.query;
+
+  if(pathName === '/' ||
+    pathName === '/index.html'|| // and also for this one
+    pathName === '/styles/styles.css'||
+    pathName === '/bower_components/jquery/dist/jquery.js'||
+    pathName === '/bower_components/underscore/underscore.js'||
+    pathName === '/env/config.js'||
+    pathName === '/scripts/app.js'){
+    
+    var extension = pathName.substring(pathName.lastIndexOf('.') + 1);
+
+    pathName = pathName === '/' ? '/index.html' : pathName;
+    //read the file on hard drive via fs module
+    var fileName = '../client' + pathName;
+    fs.readFile(fileName,function(err, data){
+      if (err) throw err;
+      headers['Content-Type'] = contentTypes[extension];
+      response.writeHead(200, headers);
+      response.end(data);
+    });
+    //return entire file's html as response body
+    //status code: 200
+  }
+
+  //else [do all the endpoint url checking, below]
+
+  // ---------------- serve messages as endpoint ----------------
   //if request.url is [our url]
-  if(request.url.substring(0, messagesURL.length) === messagesURL){
+  else if(request.url.substring(0, messagesURL.length) === messagesURL){
     var roomName = request.url.substring(messagesURL.length);
     //if request method is GET
     if(request.method.toUpperCase() === "GET"){
       //response.end(the messages as json)
       headers['Content-Type'] = "application/json";
-      response.writeHead(statusCode, headers);
+      response.writeHead(200, headers);
       var filteredData = _.filter(messagesData, function(message){
         return (message.roomname === roomName);
       });
@@ -101,7 +148,7 @@ var requestHandler = function(request, response) {
         message.opponents = {"__type":"Relation","className":"Player"};
         message.roomname = roomName;
         //push to data.results
-        messagesData.push(message);
+        messagesData.unshift(message);
         //response.end('')
         response.writeHead(201,headers);
         //respond with createdAt and objectId
@@ -111,8 +158,8 @@ var requestHandler = function(request, response) {
     //else if options is OPTIONS
     else if (request.method.toUpperCase()==='OPTIONS'){
       //response.end('')
-      response.writeHead(statusCode, headers);
-      response.end('');
+      response.writeHead(200, headers);
+      response.end();
     }
   }
   //(else do nothing)
